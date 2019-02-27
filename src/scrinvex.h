@@ -12,6 +12,8 @@
 #include <GTF.h>
 #include <BamReader.h>
 
+using namespace rnaseqc;
+
 class InvexCounter {
     unsigned long introns, exons, junctions;
 

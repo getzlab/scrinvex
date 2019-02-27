@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
         map<chrom, list<Feature>> features;
         while (reader >> line)
         {
-            if (line.type == "gene" || line.type == "exon")
+            if (line.type == FeatureType::Gene || line.type == FeatureType::Exon)
             {
                 features[line.chromosome].push_back(line);
                 ++featcnt;
@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
 
 void dropFeatures(std::list<Feature> &features)
 {
-    for (Feature &feat : features) if (feat.type == "gene") fragmentTracker.erase(feat.feature_id);
+    for (Feature &feat : features) if (feat.type == FeatureType::Gene) fragmentTracker.erase(feat.feature_id);
     features.clear();
 }
 
@@ -190,9 +190,9 @@ void InvexCounter::countRead(std::list<Feature> &features, Alignment &alignment,
         shared_ptr<list<Feature> > intersections = shared_ptr<list<Feature> >(intersectBlock(segment, features));
         for (Feature &genomeFeature : *intersections)
         {
-            if (genomeFeature.type == "exon" && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
+            if (genomeFeature.type == FeatureType::Exon && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
                 get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
-            else if (genomeFeature.type == "gene" && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
+            else if (genomeFeature.type == FeatureType::Gene && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
                 get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
         }
     }
