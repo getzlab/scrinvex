@@ -23,99 +23,149 @@ int main(int argc, char* argv[])
     Positional<string> gtfFile(parser, "gtf", "The input GTF file containing features to check the bam against");
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
     Positional<string> outputDir(parser, "output", "Output directory");
-    
-    parser.ParseCLI(argc, argv);
-    
-    Feature line; //current feature being read from the gtf
-    ifstream reader(gtfFile.Get());
-    if (!reader.is_open())
+    try
     {
-        cerr << "Unable to open GTF file: " << gtfFile.Get() << endl;
-        return 10;
-    }
-    
-    unsigned long featcnt = 0, alignmentCount = 0;
-    map<chrom, list<Feature>> features;
-    while (reader >> line)
-    {
-        if (line.type == "gene" || line.type == "exon")
+        parser.ParseCLI(argc, argv);
+
+        if (!gtfFile) throw ValidationError("No GTF file provided");
+        if (!bamFile) throw ValidationError("No BAM file provided");
+        if (!outputDir) throw ValidationError("No output directory provided");
+
+        Feature line; //current feature being read from the gtf
+        ifstream reader(gtfFile.Get());
+        if (!reader.is_open())
         {
-            features[line.chromosome].push_back(line);
-            ++featcnt;
-        }
-    }
-    for (auto entry : features)
-        entry.second.sort(compIntervalStart);
-    cout << featcnt << " features loaded" << endl;
-    
-    geneCounters counts; //barcode -> counts
-    
-    {
-        SeqlibReader bam;
-        if (!bam.open(bamFile.Get()))
-        {
-            cerr << "Unable to open BAM file: " << bamFile.Get() << endl;
+            cerr << "Unable to open GTF file: " << gtfFile.Get() << endl;
             return 10;
         }
-        SeqLib::BamHeader header = bam.getHeader();
-        SeqLib::HeaderSequenceVector sequences = header.GetHeaderSequenceVector();
-        
-        bool hasOverlap = false;
-        for(auto sequence = sequences.begin(); sequence != sequences.end(); ++sequence)
+
+        unsigned long featcnt = 0, alignmentCount = 0;
+        map<chrom, list<Feature>> features;
+        while (reader >> line)
         {
-            chrom chrom = chromosomeMap(sequence->Name);
-            if (features.find(chrom) != features.end())
+            if (line.type == "gene" || line.type == "exon")
             {
-                hasOverlap = true;
-                break;
+                features[line.chromosome].push_back(line);
+                ++featcnt;
             }
         }
-        if (!hasOverlap)
+        for (auto entry : features)
+            entry.second.sort(compIntervalStart);
+        cout << featcnt << " features loaded" << endl;
+
+        geneCounters counts; //barcode -> counts
+
         {
-            cerr << "BAM file shares no contigs with GTF" << endl;
-            return 11;
-        }
-        
-        Alignment alignment;
-        
-        int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
-        chrom current_chrom = 0;
-        
-        while (bam.next(alignment))
-        {
-            ++alignmentCount;
-            if (!(alignment.SecondaryFlag() || alignment.QCFailFlag()) && alignment.MappedFlag())
+            SeqlibReader bam;
+            if (!bam.open(bamFile.Get()))
             {
-                chrom chr = getChrom(alignment, sequences); //parse out a chromosome shorthand
-                if (chr != current_chrom)
+                cerr << "Unable to open BAM file: " << bamFile.Get() << endl;
+                return 10;
+            }
+            SeqLib::BamHeader header = bam.getHeader();
+            SeqLib::HeaderSequenceVector sequences = header.GetHeaderSequenceVector();
+
+            bool hasOverlap = false;
+            for(auto sequence = sequences.begin(); sequence != sequences.end(); ++sequence)
+            {
+                chrom chrom = chromosomeMap(sequence->Name);
+                if (features.find(chrom) != features.end())
                 {
-                    dropFeatures(features[current_chrom]);
-                    current_chrom = chr;
+                    hasOverlap = true;
+                    break;
                 }
-                else if (last_position > alignment.Position())
-                    cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
-                last_position = alignment.Position();
-                trimFeatures(alignment, features[chr]); //drop features that appear before this read
-                string barcode;
-                alignment.GetZTag(BARCODE_TAG, barcode);
-                counts[barcode].countRead(features[chr], alignment, chr);
+            }
+            if (!hasOverlap)
+            {
+                cerr << "BAM file shares no contigs with GTF" << endl;
+                return 11;
+            }
+
+            Alignment alignment;
+
+            int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
+            chrom current_chrom = 0;
+
+            while (bam.next(alignment))
+            {
+                ++alignmentCount;
+                if (!(alignment.SecondaryFlag() || alignment.QCFailFlag()) && alignment.MappedFlag())
+                {
+                    chrom chr = getChrom(alignment, sequences); //parse out a chromosome shorthand
+                    if (chr != current_chrom)
+                    {
+                        dropFeatures(features[current_chrom]);
+                        current_chrom = chr;
+                    }
+                    else if (last_position > alignment.Position())
+                        cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
+                    last_position = alignment.Position();
+                    trimFeatures(alignment, features[chr]); //drop features that appear before this read
+                    string barcode;
+                    alignment.GetZTag(BARCODE_TAG, barcode);
+                    counts[barcode].countRead(features[chr], alignment, chr);
+                }
             }
         }
+
+        cout << "Generating Report" << endl;
+
+        ofstream report(outputDir.Get() + "/" + "report.tsv");
+        report << counts;
+        report.close();
+
+        return 0;
     }
-    
-    cout << "Generating Report" << endl;
-    
-    ofstream report(outputDir.Get() + "/" + "report.tsv");
-//    report << "Barcode\tIntrons\tJunctions\tExons" << endl;
-//    for (auto entry : counts)
-//    {
-//        report << entry.first << "\t";
-//        report << entry.second << endl;
-//    }
-    report << counts;
-    report.close();
-    
-    
+    catch (args::Help)
+    {
+        cout << parser;
+        return 4;
+    }
+    catch (args::ParseError &e)
+    {
+        cerr << parser << endl;
+        cerr << "Argument parsing error: " << e.what() << endl;
+        return 5;
+    }
+    catch (args::ValidationError &e)
+    {
+        cerr << parser << endl;
+        cerr << "Argument validation error: " << e.what() << endl;
+        return 6;
+    }
+    catch (fileException &e)
+    {
+        cerr << e.error << endl;
+        return 10;
+    }
+    catch (invalidContigException &e)
+    {
+        cerr << "GTF referenced a contig not present in the FASTA: " << e.error << endl;
+        return 11;
+    }
+    catch (gtfException &e)
+    {
+        cerr << "Failed to parse the GTF: " << e.error << endl;
+        return 11;
+    }
+    catch(ios_base::failure &e)
+    {
+        cerr << "Encountered an IO failure" << endl;
+        cerr << e.what() << endl;
+        return 10;
+    }
+    catch(std::bad_alloc &e)
+    {
+        cerr << "Memory allocation failure. Out of memory" << endl;
+        cerr << e.what() << endl;
+        return 10;
+    }
+    catch (...)
+    {
+        cerr << parser << endl;
+        cerr << "Unknown error" << endl;
+        return -1;
+    }
 }
 
 void dropFeatures(std::list<Feature> &features)
@@ -139,14 +189,14 @@ void InvexCounter::countRead(std::list<Feature> &features, Alignment &alignment,
         {
             // strandedness?
             if (genomeFeature.type == "exon" && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
-                get<exonicAlignedLength>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
+                get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
             else if (genomeFeature.type == "gene" && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
-                get<genicAlignedLength>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
+                get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
         }
     }
     for (auto entry : lengths)
     {
-        unsigned int genicLength = get<genicAlignedLength>(entry.second), exonicLength = get<exonicAlignedLength>(entry.second);
+        unsigned int genicLength = get<GENIC_ALIGNED_LENGTH>(entry.second), exonicLength = get<EXONIC_ALIGNED_LENGTH>(entry.second);
         if (genicLength > 0)
         {
             if (genicLength > exonicLength)
@@ -181,4 +231,3 @@ std::ofstream& operator<<(std::ofstream &stream, const geneCounters &counters)
     }
     return stream;
 }
-

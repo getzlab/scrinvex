@@ -14,12 +14,12 @@
 
 class InvexCounter {
     unsigned long introns, exons, junctions;
-    
+
 public:
     InvexCounter() : introns(0ul), exons(0ul), junctions(0ul) {
-        
+
     }
-    
+
     void countRead(std::list<Feature>&, Alignment&, chrom);
     friend std::ofstream& operator<<(std::ofstream&, const InvexCounter&);
 };
@@ -34,7 +34,7 @@ chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
 std::ofstream& operator<<(std::ofstream&, const InvexCounter&);
 std::ofstream& operator<<(std::ofstream&, const geneCounters&);
 
-const std::size_t genicAlignedLength = 0, exonicAlignedLength = 1;
+const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1;
 const std::string BARCODE_TAG = "CB", UMI_TAG = "UB", MISMATCH_TAG = "NM";
 
 
