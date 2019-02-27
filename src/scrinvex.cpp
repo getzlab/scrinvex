@@ -22,14 +22,14 @@ int main(int argc, char* argv[])
     HelpFlag help(parser, "help", "Display this message and quit", {'h', "help"});
     Positional<string> gtfFile(parser, "gtf", "The input GTF file containing features to check the bam against");
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
-    Positional<string> outputDir(parser, "output", "Output directory");
+    Positional<string> outputPath(parser, "output", "Output filepath. Defaults to stdout");
     try
     {
         parser.ParseCLI(argc, argv);
 
         if (!gtfFile) throw ValidationError("No GTF file provided");
         if (!bamFile) throw ValidationError("No BAM file provided");
-        if (!outputDir) throw ValidationError("No output directory provided");
+        if (!outputPath) cerr << "Writing output to stdout" << endl;
 
         Feature line; //current feature being read from the gtf
         ifstream reader(gtfFile.Get());
@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
         }
         for (auto entry : features)
             entry.second.sort(compIntervalStart);
-        cout << featcnt << " features loaded" << endl;
+        cerr << featcnt << " features loaded" << endl;
 
         geneCounters counts; //barcode -> counts
 
@@ -66,9 +66,9 @@ int main(int argc, char* argv[])
             SeqLib::HeaderSequenceVector sequences = header.GetHeaderSequenceVector();
 
             bool hasOverlap = false;
-            for(auto sequence = sequences.begin(); sequence != sequences.end(); ++sequence)
+            for(auto sequence : sequences)
             {
-                chrom chrom = chromosomeMap(sequence->Name);
+                chrom chrom = chromosomeMap(sequence.Name);
                 if (features.find(chrom) != features.end())
                 {
                     hasOverlap = true;
@@ -108,11 +108,15 @@ int main(int argc, char* argv[])
             }
         }
 
-        cout << "Generating Report" << endl;
-
-        ofstream report(outputDir.Get() + "/" + "report.tsv");
-        report << counts;
-        report.close();
+        cerr << "Generating Report" << endl;
+        
+        if (outputPath)
+        {
+            ofstream report(outputPath.Get());
+            report << counts;
+            report.close();
+        }
+        else cout << counts;
 
         return 0;
     }
@@ -170,7 +174,7 @@ int main(int argc, char* argv[])
 
 void dropFeatures(std::list<Feature> &features)
 {
-    for (auto feat = features.begin(); feat != features.end(); ++feat) if (feat->type == "gene") fragmentTracker.erase(feat->feature_id);
+    for (Feature &feat : features) if (feat.type == "gene") fragmentTracker.erase(feat.feature_id);
     features.clear();
 }
 
@@ -183,11 +187,9 @@ void InvexCounter::countRead(std::list<Feature> &features, Alignment &alignment,
     alignment.GetZTag(UMI_TAG, umi);
     for (Feature &segment : alignedSegments)
     {
-        //Check memory usage in profiler. This isn't the best syntax, but hopefully shared_ptr understands
         shared_ptr<list<Feature> > intersections = shared_ptr<list<Feature> >(intersectBlock(segment, features));
         for (Feature &genomeFeature : *intersections)
         {
-            // strandedness?
             if (genomeFeature.type == "exon" && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
                 get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
             else if (genomeFeature.type == "gene" && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
@@ -215,13 +217,13 @@ chrom getChrom(Alignment &alignment, SeqLib::HeaderSequenceVector &sequences)
     return chromosomeMap(sequences[alignment.ChrID()].Name);
 }
 
-ofstream& operator<<(ofstream &stream, const InvexCounter &counter)
+ostream& operator<<(ostream &stream, const InvexCounter &counter)
 {
     stream << counter.introns << "\t" << counter.junctions << "\t" << counter.exons;
     return stream;
 }
 
-std::ofstream& operator<<(std::ofstream &stream, const geneCounters &counters)
+std::ostream& operator<<(std::ostream &stream, const geneCounters &counters)
 {
     stream << "Barcode\tIntrons\tJunctions\tExons" << endl;
     for (auto entry : counters)
