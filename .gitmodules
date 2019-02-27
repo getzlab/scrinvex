@@ -1,0 +1,3 @@
+[submodule "rnaseqc"]
+	path = rnaseqc
+	url = git@github.com:broadinstitute/rnaseqc.git
