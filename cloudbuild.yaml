@@ -1,0 +1,29 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - pull
+      - gcr.io/broad-cga-aarong-gtex/rnaseqc:latest
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - gcr.io/broad-cga-aarong-gtex/scrinvex:$COMMIT_SHA
+      - --cache-from
+      - gcr.io/broad-cga-aarong-gtex/rnaseqc:latest
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - gcr.io/broad-cga-aarong-gtex/scrinvex:$COMMIT_SHA
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - tag
+      - gcr.io/broad-cga-aarong-gtex/scrinvex:$COMMIT_SHA
+      - gcr.io/broad-cga-aarong-gtex/scrinvex:latest
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - gcr.io/broad-cga-aarong-gtex/scrinvex:latest
+images:
+  - gcr.io/broad-cga-aarong-gtex/scrinvex
+timeout: 300s
