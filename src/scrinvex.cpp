@@ -37,7 +37,7 @@ int main(int argc, char* argv[])
         if (!gtfFile) throw ValidationError("No GTF file provided");
         if (!bamFile) throw ValidationError("No BAM file provided");
         if (!outputDir) throw ValidationError("No output directory provided");
-        
+
         const string SAMPLENAME = sampleName ? sampleName.Get() : boost::filesystem::path(bamFile.Get()).filename().string();
 
         Feature line; //current feature being read from the gtf
@@ -47,7 +47,25 @@ int main(int argc, char* argv[])
             cerr << "Unable to open GTF file: " << gtfFile.Get() << endl;
             return 10;
         }
-        
+
+        cout << "                                                                           ***                         " << endl;
+        cout << "                       ***                                              *****                         " << endl;
+        cout << "                     *****                   ***         *            *****                           " << endl;
+        cout << "              **   *****  ***********     * ******       **          ****                             " << endl;
+        cout << "            ***** ****    ***********    ** ********     ***         ***   ****        ***        " << endl;
+        cout << "         ******   ***     ***  *****    *** ***  *****   ***     **  ***   ******    *****        " << endl;
+        cout << "       ******     ***     ********      *** ***    ***** ***     *** ******* ***********          " << endl;
+        cout << "     ******       ***     *******       *** ***      *** ***     *** *******   *******            " << endl;
+        cout << "   ************** ***     *********     *** ***      *** ***     *** ***      *********           " << endl;
+        cout << " **************** ***     ***   *****   *** ***      *** ***     *** ***     *****  *****         " << endl;
+        cout << "           *****  *****   ***     ***** *** ***      *** ***     *** ***    ***       *****       " << endl;
+        cout << "         *****      ***** ***       *** *** ***      *** ***    **** ***** **           *****     " << endl;
+        cout << "       *****          *****             *** ***      *** ***  *****    *****              *****   " << endl;
+        cout << "     *****              ****                ***          ********        *****              ****  " << endl;
+        cout << "    ****                  ***               **           ******            *****              *** " << endl;
+        cout << "                            **                           ****                ***                **" << endl;
+        cout << "                                                         **                                       " << endl;
+
         cout << "Parsing GTF" << endl;
 
         unsigned long featcnt = 0, alignmentCount = 0;
@@ -96,20 +114,20 @@ int main(int argc, char* argv[])
 
             int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
             chrom current_chrom = 0;
-            
+
             //use boost to ensure that the output directory exists before the metrics are dumped to it
             if (!boost::filesystem::exists(outputDir.Get()))
             {
                 boost::filesystem::create_directories(outputDir.Get());
             }
-            
+
             ofstream introns(outputDir.Get() + "/" + SAMPLENAME + ".introns.tsv");
             ofstream junctions(outputDir.Get() + "/" + SAMPLENAME + ".junctions.tsv");
             ofstream exons(outputDir.Get() + "/" + SAMPLENAME + ".exons.tsv");
             introns << "# sparse" << endl << "gene_id\tbarcode\tintrons" << endl;
             junctions << "# sparse" << endl << "gene_id\tbarcode\tjunctions" << endl;
             exons << "# sparse" << endl << "gene_id\tbarcode\texons" << endl;
-            
+
             cout << "Parsing BAM" << endl;
 
             while (bam.next(alignment))
@@ -135,7 +153,7 @@ int main(int argc, char* argv[])
             introns.close();
             junctions.close();
             exons.close();
-            
+
             if (missingUMI + missingBC)
                 cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
         }
@@ -200,18 +218,18 @@ int main(int argc, char* argv[])
 }
 
 namespace scrinvex {
-    
+
     std::tuple<unsigned long, unsigned long, unsigned long>& InvexCounter::getCounts(const std::string &barcode)
     {
         return this->counts[barcode];
     }
-    
+
     set<string>& InvexCounter::getBarcodes(set<string> &destination) const
     {
         for (auto entry : this->counts) destination.insert(entry.first);
         return destination;
     }
-    
+
     void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome)
     {
         vector<Feature> alignedSegments;
@@ -254,12 +272,12 @@ namespace scrinvex {
             }
         }
     }
-    
+
     chrom getChrom(Alignment &alignment, SeqLib::HeaderSequenceVector &sequences)
     {
         return chromosomeMap(sequences[alignment.ChrID()].Name);
     }
-    
+
     void dropFeatures(std::list<Feature> &features, geneCounters &counts, std::ostream &introns, std::ostream &junctions, std::ostream &exons)
     {
         for (Feature &feat : features) if (feat.type == FeatureType::Gene) {
