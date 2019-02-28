@@ -1,0 +1,6 @@
+*.bam
+*.gtf
+*.gct
+*.cram
+*.fasta
+*.o

@@ -7,7 +7,7 @@ ABI=1
 #Provide full paths here to .a archives for libraries which should be statically linked
 STATIC_LIBS=
 #List of remaining libraries that will be dynamically linked
-LIBS=-lboost_filesystem -lboost_regex -lz -llzma -lbz2 -lpthread
+LIBS=-lboost_filesystem -lboost_regex -lboost_system -lz -llzma -lbz2 -lpthread
 
 CC=g++
 STDLIB=-std=c++14
