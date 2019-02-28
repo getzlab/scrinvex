@@ -31,10 +31,6 @@ namespace scrinvex {
         
         std::tuple<unsigned long, unsigned long, unsigned long>& getCounts(const std::string&);
         std::set<std::string>& getBarcodes(std::set<std::string>&) const;
-        
-//        friend void ::countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom);
-//        friend void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
-//        friend void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
     };
     
     // gene id -> (genic aligned length, exonic aligned length)
