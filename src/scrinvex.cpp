@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
     Positional<string> outputDir(parser, "output", "Output Directory");
     ValueFlag<string> sampleName(parser, "sample", "The name of the current sample.  Default: The bam's filename", {'s', "sample"});
     ValueFlag<string> barcodeFile(parser, "barcodes", "Path to filtered barcodes.tsv file from cellranger. Only barcodes listed in the file will be used. Default: All barcodes present in bam", {'b', "barcodes"});
-    ValueFlag<unsigned int> mappingQualityThreshold(parser,"quality", "Set the lower bound on read quality for exon coverage counting. Reads below this quality are skipped. Default: 255", {'q', "quality"});
+    ValueFlag<unsigned int> mappingQualityThreshold(parser,"quality", "Set the lower bound on read quality for coverage counting. Reads below this quality are skipped. Default: 255", {'q', "quality"});
     try
     {
         parser.ParseCLI(argc, argv);
