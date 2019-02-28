@@ -51,24 +51,24 @@ int main(int argc, char* argv[])
             return 10;
         }
 
-        cout << "                                                                           ***                         " << endl;
-        cout << "                       ***                                              *****                         " << endl;
-        cout << "                     *****                   ***         *            *****                           " << endl;
-        cout << "              **   *****  ***********     * ******       **          ****                             " << endl;
-        cout << "            ***** ****    ***********    ** ********     ***         ***   ****        ***        " << endl;
-        cout << "         ******   ***     ***  *****    *** ***  *****   ***     **  ***   ******    *****        " << endl;
-        cout << "       ******     ***     ********      *** ***    ***** ***     *** ******* ***********          " << endl;
-        cout << "     ******       ***     *******       *** ***      *** ***     *** *******   *******            " << endl;
-        cout << "   ************** ***     *********     *** ***      *** ***     *** ***      *********           " << endl;
-        cout << " **************** ***     ***   *****   *** ***      *** ***     *** ***     *****  *****         " << endl;
-        cout << "           *****  *****   ***     ***** *** ***      *** ***     *** ***    ***       *****       " << endl;
-        cout << "         *****      ***** ***       *** *** ***      *** ***    **** ***** **           *****     " << endl;
-        cout << "       *****          *****             *** ***      *** ***  *****    *****              *****   " << endl;
-        cout << "     *****              ****                ***          ********        *****              ****  " << endl;
-        cout << "    ****                  ***               **           ******            *****              *** " << endl;
-        cout << "                            **                           ****                ***                **" << endl;
-        cout << "                                                         **                                       " << endl;
-        
+        cout << "                                        \033[1;31m                \033[0m                   ***                         " << endl;
+        cout << "                       ***              \033[1;31m                \033[0m                *****                         " << endl;
+        cout << "                     *****              \033[1;31m     ***        \033[0m *            *****                           " << endl;
+        cout << "              **   *****  ***********   \033[1;31m  * ******      \033[0m **          ****                             " << endl;
+        cout << "            ***** ****    ***********   \033[1;31m ** ********    \033[0m ***         ***   ****        ***        " << endl;
+        cout << "         ******   ***     ***  *****    \033[1;31m*** ***  *****  \033[0m ***     **  ***   ******    *****        " << endl;
+        cout << "       ******     ***     ********      \033[1;31m*** ***    *****\033[0m ***     *** ******* ***********          " << endl;
+        cout << "     ******       ***     *******       \033[1;31m*** ***      ***\033[0m ***     *** *******   *******            " << endl;
+        cout << "   ************** ***     *********     \033[1;31m*** ***      ***\033[0m ***     *** ***      *********           " << endl;
+        cout << " **************** ***     ***   *****   \033[1;31m*** ***      ***\033[0m ***     *** ***     *****  *****         " << endl;
+        cout << "           *****  *****   ***     ***** \033[1;31m*** ***      ***\033[0m ***     *** ***    ***       *****       " << endl;
+        cout << "         *****      ***** ***       *** \033[1;31m*** ***      ***\033[0m ***    **** ***** **           *****     " << endl;
+        cout << "       *****          *****             \033[1;31m*** ***      ***\033[0m ***  *****    *****              *****   " << endl;
+        cout << "     *****              ****            \033[1;31m    ***         \033[0m ********        *****              ****  " << endl;
+        cout << "    ****                  ***           \033[1;31m    **          \033[0m ******            *****              *** " << endl;
+        cout << "                            **          \033[1;31m                \033[0m ****                ***                **" << endl;
+        cout << "                                        \033[1;31m                \033[0m **                                       " << endl;
+
         unordered_set<string> goodBarcodes;
         if (barcodeFile)
         {
@@ -110,11 +110,11 @@ int main(int argc, char* argv[])
             cerr << "Unable to open BAM file: " << bamFile.Get() << endl;
             return 10;
         }
-        
+
         // Get the list of contigs present in bam header
         SeqLib::BamHeader header = bam.getHeader();
         SeqLib::HeaderSequenceVector sequences = header.GetHeaderSequenceVector();
-        
+
         // Intersect bam header with gtf contigs to make sure they share the same naming scheme
         bool hasOverlap = false;
         for(auto sequence : sequences)
@@ -131,18 +131,18 @@ int main(int argc, char* argv[])
             cerr << "BAM file shares no contigs with GTF" << endl;
             return 11;
         }
-        
+
         Alignment alignment;
-        
+
         int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
         chrom current_chrom = 0;
-        
+
         //use boost to ensure that the output directory exists before the metrics are dumped to it
         if (!boost::filesystem::exists(outputDir.Get()))
         {
             boost::filesystem::create_directories(outputDir.Get());
         }
-        
+
         // Open all output files
         ofstream introns(outputDir.Get() + "/" + SAMPLENAME + ".introns.tsv");
         ofstream junctions(outputDir.Get() + "/" + SAMPLENAME + ".junctions.tsv");
@@ -150,9 +150,9 @@ int main(int argc, char* argv[])
         introns << "gene_id\tbarcode\tintrons" << endl;
         junctions << "gene_id\tbarcode\tjunctions" << endl;
         exons << "gene_id\tbarcode\texons" << endl;
-        
+
         cout << "Parsing BAM" << endl;
-        
+
         while (bam.next(alignment))
         {
             ++alignmentCount;
@@ -174,17 +174,17 @@ int main(int argc, char* argv[])
                 countRead(counts, features[chr], alignment, chr, goodBarcodes);
             }
         }
-        
+
         cout << "Finalizing data" << endl;
         // Drop all remaining genes to ensure their coverage data has been written
         for (auto contig : features) if (contig.second.size()) dropFeatures(contig.second, counts, introns, junctions, exons);
         introns.close();
         junctions.close();
         exons.close();
-        
+
         if (missingUMI + missingBC)
             cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
-        
+
         if (skippedBC)
             cerr << "Skipped " << skippedBC << " reads with barcodes not listed in " << barcodeFile.Get() << endl;
 
@@ -265,13 +265,13 @@ namespace scrinvex {
     {
         // We don't expect goodBarcodes to change, so just grab its size once
         static const size_t n_barcodes = goodBarcodes.size();
-        
+
         // Now parse the Cigar string to get the set of intervals that this read aligns over
         vector<Feature> alignedSegments;
         extractBlocks(alignment, alignedSegments, chromosome, false);
-        
+
         alignmentLengthTracker lengths;
-        
+
         // Extract the barcode and umi. Check that they're present and barcode is in the set of good barcodes
         string barcode, umi;
         if (!alignment.GetZTag(BARCODE_TAG, barcode))
@@ -289,7 +289,7 @@ namespace scrinvex {
             ++skippedBC;
             return;
         }
-        
+
         // Intersect all aligned segments with the list of features.
         for (Feature &segment : alignedSegments)
         {
@@ -315,7 +315,7 @@ namespace scrinvex {
                     else get<INTRONS>(counts[entry.first].getCounts(barcode)) += 1; // Read aligned entirely to introns
                 }
                 else get<EXONS>(counts[entry.first].getCounts(barcode)) += 1; // Read aligned entirely to exons
-                
+
                 // Now add the UMI to the tracker so we skip UMI duplicates
                 fragmentTracker[entry.first].insert(umi);
             }
