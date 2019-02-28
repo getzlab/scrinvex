@@ -10,3 +10,15 @@ Reads with the same UMI are only checked against any given gene once. Subsequent
 # Usage
 
 `scrinvex {gtf} {bam} {output directory}`
+
+## Output Format
+
+`scrinvex` produces 3 files in the output directory:
+* `*.introns.tsv`
+* `*.junctions.tsv`
+* `*.exons.tsv`
+
+Each of these three files contains 3 columns:
+* `gene_id`
+* `barcode`
+* Counts of intron, junction, or exon reads for that gene id - barcode combination, respectively

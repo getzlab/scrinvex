@@ -10,11 +10,17 @@
 #include <stdio.h>
 #include <memory>
 #include <args.hxx>
+#include <boost/filesystem.hpp>
 #include <Metrics.h>
 #include <Expression.h>
 
 using namespace args;
 using namespace std;
+using namespace scrinvex;
+
+namespace scrinvex {
+    unsigned int missingBC, missingUMI;
+}
 
 int main(int argc, char* argv[])
 {
@@ -22,14 +28,17 @@ int main(int argc, char* argv[])
     HelpFlag help(parser, "help", "Display this message and quit", {'h', "help"});
     Positional<string> gtfFile(parser, "gtf", "The input GTF file containing features to check the bam against");
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
-    Positional<string> outputPath(parser, "output", "Output filepath. Defaults to stdout");
+    Positional<string> outputDir(parser, "output", "Output Directory");
+    ValueFlag<string> sampleName(parser, "sample", "The name of the current sample.  Default: The bam's filename", {'s', "sample"});
     try
     {
         parser.ParseCLI(argc, argv);
 
         if (!gtfFile) throw ValidationError("No GTF file provided");
         if (!bamFile) throw ValidationError("No BAM file provided");
-        if (!outputPath) cerr << "Writing output to stdout" << endl;
+        if (!outputDir) throw ValidationError("No output directory provided");
+        
+        const string SAMPLENAME = sampleName ? sampleName.Get() : boost::filesystem::path(bamFile.Get()).filename().string();
 
         Feature line; //current feature being read from the gtf
         ifstream reader(gtfFile.Get());
@@ -38,6 +47,8 @@ int main(int argc, char* argv[])
             cerr << "Unable to open GTF file: " << gtfFile.Get() << endl;
             return 10;
         }
+        
+        cout << "Parsing GTF" << endl;
 
         unsigned long featcnt = 0, alignmentCount = 0;
         map<chrom, list<Feature>> features;
@@ -51,7 +62,7 @@ int main(int argc, char* argv[])
         }
         for (auto entry : features)
             entry.second.sort(compIntervalStart);
-        cerr << featcnt << " features loaded" << endl;
+        cout << featcnt << " features loaded" << endl;
 
         geneCounters counts; //barcode -> counts
 
@@ -85,6 +96,21 @@ int main(int argc, char* argv[])
 
             int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
             chrom current_chrom = 0;
+            
+            //use boost to ensure that the output directory exists before the metrics are dumped to it
+            if (!boost::filesystem::exists(outputDir.Get()))
+            {
+                boost::filesystem::create_directories(outputDir.Get());
+            }
+            
+            ofstream introns(outputDir.Get() + "/" + SAMPLENAME + ".introns.tsv");
+            ofstream junctions(outputDir.Get() + "/" + SAMPLENAME + ".junctions.tsv");
+            ofstream exons(outputDir.Get() + "/" + SAMPLENAME + ".exons.tsv");
+            introns << "# sparse" << endl << "gene_id\tbarcode\tintrons" << endl;
+            junctions << "# sparse" << endl << "gene_id\tbarcode\tjunctions" << endl;
+            exons << "# sparse" << endl << "gene_id\tbarcode\texons" << endl;
+            
+            cout << "Parsing BAM" << endl;
 
             while (bam.next(alignment))
             {
@@ -94,29 +120,25 @@ int main(int argc, char* argv[])
                     chrom chr = getChrom(alignment, sequences); //parse out a chromosome shorthand
                     if (chr != current_chrom)
                     {
-                        dropFeatures(features[current_chrom]);
+                        dropFeatures(features[current_chrom], counts, introns, junctions, exons);
                         current_chrom = chr;
                     }
                     else if (last_position > alignment.Position())
                         cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
                     last_position = alignment.Position();
-                    trimFeatures(alignment, features[chr]); //drop features that appear before this read
-                    string barcode;
-                    alignment.GetZTag(BARCODE_TAG, barcode);
-                    counts[barcode].countRead(features[chr], alignment, chr);
+                    trimFeatures(alignment, features[chr], counts, introns, junctions, exons); //drop features that appear before this read
+                    countRead(counts, features[chr], alignment, chr);
                 }
             }
+            cout << "Finalizing data" << endl;
+            for (auto contig : features) if (contig.second.size()) dropFeatures(contig.second, counts, introns, junctions, exons);
+            introns.close();
+            junctions.close();
+            exons.close();
+            
+            if (missingUMI + missingBC)
+                cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
         }
-
-        cerr << "Generating Report" << endl;
-        
-        if (outputPath)
-        {
-            ofstream report(outputPath.Get());
-            report << counts;
-            report.close();
-        }
-        else cout << counts;
 
         return 0;
     }
@@ -152,6 +174,11 @@ int main(int argc, char* argv[])
         cerr << "Failed to parse the GTF: " << e.error << endl;
         return 11;
     }
+    catch (boost::filesystem::filesystem_error &e)
+    {
+        cerr << "Filesystem error:  " << e.what() << endl;
+        return 8;
+    }
     catch(ios_base::failure &e)
     {
         cerr << "Encountered an IO failure" << endl;
@@ -172,64 +199,102 @@ int main(int argc, char* argv[])
     }
 }
 
-void dropFeatures(std::list<Feature> &features)
-{
-    for (Feature &feat : features) if (feat.type == FeatureType::Gene) fragmentTracker.erase(feat.feature_id);
-    features.clear();
-}
-
-void InvexCounter::countRead(std::list<Feature> &features, Alignment &alignment, chrom chromosome)
-{
-    vector<Feature> alignedSegments;
-    extractBlocks(alignment, alignedSegments, chromosome, false);
-    alignmentLengthTracker lengths;
-    string umi;
-    alignment.GetZTag(UMI_TAG, umi);
-    for (Feature &segment : alignedSegments)
+namespace scrinvex {
+    
+    std::tuple<unsigned long, unsigned long, unsigned long>& InvexCounter::getCounts(const std::string &barcode)
     {
-        shared_ptr<list<Feature> > intersections = shared_ptr<list<Feature> >(intersectBlock(segment, features));
-        for (Feature &genomeFeature : *intersections)
-        {
-            if (genomeFeature.type == FeatureType::Exon && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
-                get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
-            else if (genomeFeature.type == FeatureType::Gene && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
-                get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
-        }
+        return this->counts[barcode];
     }
-    for (auto entry : lengths)
+    
+    set<string>& InvexCounter::getBarcodes(set<string> &destination) const
     {
-        unsigned int genicLength = get<GENIC_ALIGNED_LENGTH>(entry.second), exonicLength = get<EXONIC_ALIGNED_LENGTH>(entry.second);
-        if (genicLength > 0)
+        for (auto entry : this->counts) destination.insert(entry.first);
+        return destination;
+    }
+    
+    void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome)
+    {
+        vector<Feature> alignedSegments;
+        extractBlocks(alignment, alignedSegments, chromosome, false);
+        alignmentLengthTracker lengths;
+        string barcode, umi;
+        if (!alignment.GetZTag(BARCODE_TAG, barcode))
         {
-            if (genicLength > exonicLength)
+            ++missingBC;
+            return;
+        }
+        if (!alignment.GetZTag(UMI_TAG, umi))
+        {
+            ++missingUMI;
+            return;
+        }
+        for (Feature &segment : alignedSegments)
+        {
+            shared_ptr<list<Feature> > intersections = shared_ptr<list<Feature> >(intersectBlock(segment, features));
+            for (Feature &genomeFeature : *intersections)
             {
-                if (exonicLength) ++(this->junctions);
-                else ++(this->introns);
+                if (genomeFeature.type == FeatureType::Exon && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
+                    get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
+                else if (genomeFeature.type == FeatureType::Gene && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
+                    get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
             }
-            else ++(this->exons);
-            fragmentTracker[entry.first].insert(umi);
+        }
+        for (auto entry : lengths)
+        {
+            unsigned int genicLength = get<GENIC_ALIGNED_LENGTH>(entry.second), exonicLength = get<EXONIC_ALIGNED_LENGTH>(entry.second);
+            if (genicLength > 0)
+            {
+                if (genicLength > exonicLength)
+                {
+                    if (exonicLength) get<JUNCTIONS>(counts[entry.first].getCounts(barcode)) += 1;
+                    else get<INTRONS>(counts[entry.first].getCounts(barcode)) += 1;
+                }
+                else get<EXONS>(counts[entry.first].getCounts(barcode)) += 1;
+                fragmentTracker[entry.first].insert(umi);
+            }
         }
     }
-}
-
-chrom getChrom(Alignment &alignment, SeqLib::HeaderSequenceVector &sequences)
-{
-    return chromosomeMap(sequences[alignment.ChrID()].Name);
-}
-
-ostream& operator<<(ostream &stream, const InvexCounter &counter)
-{
-    stream << counter.introns << "\t" << counter.junctions << "\t" << counter.exons;
-    return stream;
-}
-
-std::ostream& operator<<(std::ostream &stream, const geneCounters &counters)
-{
-    stream << "Barcode\tIntrons\tJunctions\tExons" << endl;
-    for (auto entry : counters)
+    
+    chrom getChrom(Alignment &alignment, SeqLib::HeaderSequenceVector &sequences)
     {
-        stream << entry.first << "\t";
-        stream << entry.second << endl;
+        return chromosomeMap(sequences[alignment.ChrID()].Name);
     }
-    return stream;
+    
+    void dropFeatures(std::list<Feature> &features, geneCounters &counts, std::ostream &introns, std::ostream &junctions, std::ostream &exons)
+    {
+        for (Feature &feat : features) if (feat.type == FeatureType::Gene) {
+            fragmentTracker.erase(feat.feature_id);
+            InvexCounter &invex = counts[feat.feature_id];
+            set<string> barcodes;
+            for (const string &barcode : invex.getBarcodes(barcodes))
+            {
+                auto data = invex.getCounts(barcode);
+                if (get<INTRONS>(data)) introns << feat.feature_id << "\t" << barcode << "\t" << get<INTRONS>(data) << endl;
+                if (get<JUNCTIONS>(data)) junctions << feat.feature_id << "\t" << barcode << "\t" << get<JUNCTIONS>(data) << endl;
+                if (get<EXONS>(data)) exons << feat.feature_id << "\t" << barcode << "\t" << get<EXONS>(data) << endl;
+            }
+        }
+        features.clear();
+    }
+    void trimFeatures(Alignment &alignment, std::list<Feature> &features, geneCounters &counts, std::ostream &introns, std::ostream &junctions, std::ostream &exons)
+    {
+        auto cursor = features.begin();
+        while (cursor != features.end() && cursor->end < alignment.Position())
+        {
+            if (cursor->type == FeatureType::Gene) {
+                fragmentTracker.erase(cursor->feature_id);
+                InvexCounter &invex = counts[cursor->feature_id];
+                set<string> barcodes;
+                for (const string &barcode : invex.getBarcodes(barcodes))
+                {
+                    auto data = invex.getCounts(barcode);
+                    if (get<INTRONS>(data)) introns << cursor->feature_id << "\t" << barcode << "\t" << get<INTRONS>(data) << endl;
+                    if (get<JUNCTIONS>(data)) junctions << cursor->feature_id << "\t" << barcode << "\t" << get<JUNCTIONS>(data) << endl;
+                    if (get<EXONS>(data)) exons << cursor->feature_id << "\t" << barcode << "\t" << get<EXONS>(data) << endl;
+                }
+            }
+            ++cursor;
+        }
+        features.erase(features.begin(), cursor);
+    }
 }

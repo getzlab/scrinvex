@@ -14,30 +14,41 @@
 
 using namespace rnaseqc;
 
-class InvexCounter {
-    unsigned long introns, exons, junctions;
-
-public:
-    InvexCounter() : introns(0ul), exons(0ul), junctions(0ul) {
-
-    }
-
-    void countRead(std::list<Feature>&, Alignment&, chrom);
-    friend std::ostream& operator<<(std::ostream&, const InvexCounter&);
-};
-
-// gene id -> (genic aligned length, exonic aligned length)
-typedef std::unordered_map<std::string, std::tuple<unsigned int, unsigned int> > alignmentLengthTracker;
-// barcode -> invex counter
-typedef std::unordered_map<std::string, InvexCounter> geneCounters;
-
-void dropFeatures(std::list<Feature>&);
-chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
-std::ostream& operator<<(std::ostream&, const InvexCounter&);
-std::ostream& operator<<(std::ostream&, const geneCounters&);
-
-const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1;
-const std::string BARCODE_TAG = "CB", UMI_TAG = "UB", MISMATCH_TAG = "NM";
-
+namespace scrinvex {
+    class InvexCounter;
+    
+    // gid -> invex counter
+    typedef std::unordered_map<std::string, InvexCounter> geneCounters;
+    
+    class InvexCounter {
+        // barcode -> counts
+        std::unordered_map<std::string, std::tuple<unsigned long, unsigned long, unsigned long> > counts;
+        
+    public:
+        InvexCounter() : counts() {
+            
+        }
+        
+        std::tuple<unsigned long, unsigned long, unsigned long>& getCounts(const std::string&);
+        std::set<std::string>& getBarcodes(std::set<std::string>&) const;
+        
+//        friend void ::countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom);
+//        friend void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
+//        friend void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
+    };
+    
+    // gene id -> (genic aligned length, exonic aligned length)
+    typedef std::unordered_map<std::string, std::tuple<unsigned int, unsigned int> > alignmentLengthTracker;
+    
+    void countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom);
+    void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
+    void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
+    chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
+    
+    const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1, INTRONS = 0, JUNCTIONS = 1, EXONS = 2;
+    const std::string BARCODE_TAG = "CB", UMI_TAG = "UB", MISMATCH_TAG = "NM";
+    
+    extern unsigned int missingBC, missingUMI;
+}
 
 #endif /* scrinvex_h */
