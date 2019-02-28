@@ -8,7 +8,7 @@ Reads with the same UMI are only checked against any given gene once. Subsequent
 
 # Usage
 
-`scrinvex {gtf} {bam} {output directory}`
+`scrinvex {gtf} {bam} {output directory} [-h] [-s] [-b]`
 
 # Install scR-Invex
 

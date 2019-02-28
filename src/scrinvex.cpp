@@ -19,7 +19,7 @@ using namespace std;
 using namespace scrinvex;
 
 namespace scrinvex {
-    unsigned int missingBC, missingUMI;
+    unsigned int missingBC, missingUMI, skippedBC;
 }
 
 int main(int argc, char* argv[])
@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
     Positional<string> outputDir(parser, "output", "Output Directory");
     ValueFlag<string> sampleName(parser, "sample", "The name of the current sample.  Default: The bam's filename", {'s', "sample"});
+    ValueFlag<string> barcodeFile(parser, "barcodes", "Path to filtered barcodes.tsv file from cellranger. Only barcodes listed in the file will be used. Default: All barcodes present in bam", {'b', "barcodes"});
     try
     {
         parser.ParseCLI(argc, argv);
@@ -65,6 +66,16 @@ int main(int argc, char* argv[])
         cout << "    ****                  ***               **           ******            *****              *** " << endl;
         cout << "                            **                           ****                ***                **" << endl;
         cout << "                                                         **                                       " << endl;
+        
+        unordered_set<string> goodBarcodes;
+        if (barcodeFile)
+        {
+            cout << "Reading barcodes" << endl;
+            ifstream barcodeReader(barcodeFile.Get());
+            string barcode;
+            while (barcodeReader >> barcode) goodBarcodes.insert(barcode);
+            cout << "Filtering input using " << goodBarcodes.size() << " barcodes" << endl;
+        }
 
         cout << "Parsing GTF" << endl;
 
@@ -145,7 +156,7 @@ int main(int argc, char* argv[])
                         cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
                     last_position = alignment.Position();
                     trimFeatures(alignment, features[chr], counts, introns, junctions, exons); //drop features that appear before this read
-                    countRead(counts, features[chr], alignment, chr);
+                    countRead(counts, features[chr], alignment, chr, goodBarcodes);
                 }
             }
             cout << "Finalizing data" << endl;
@@ -156,6 +167,9 @@ int main(int argc, char* argv[])
 
             if (missingUMI + missingBC)
                 cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
+            
+            if (skippedBC)
+                cerr << "Skipped " << skippedBC << " reads with barcodes not listed in " << barcodeFile.Get() << endl;
         }
 
         return 0;
@@ -230,7 +244,7 @@ namespace scrinvex {
         return destination;
     }
 
-    void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome)
+    void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome, const std::unordered_set<std::string> &goodBarcodes)
     {
         vector<Feature> alignedSegments;
         extractBlocks(alignment, alignedSegments, chromosome, false);
@@ -244,6 +258,11 @@ namespace scrinvex {
         if (!alignment.GetZTag(UMI_TAG, umi))
         {
             ++missingUMI;
+            return;
+        }
+        if (goodBarcodes.count(barcode) == 0)
+        {
+            ++skippedBC;
             return;
         }
         for (Feature &segment : alignedSegments)
