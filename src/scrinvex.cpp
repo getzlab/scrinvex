@@ -74,6 +74,11 @@ int main(int argc, char* argv[])
         {
             cout << "Reading barcodes" << endl;
             ifstream barcodeReader(barcodeFile.Get());
+            if (!barcodeReader.is_open())
+            {
+                cerr << "Unable to open barcodes file: " << barcodeFile.Get() << endl;
+                return 10;
+            }
             string barcode;
             while (barcodeReader >> barcode) goodBarcodes.insert(barcode);
             cout << "Filtering input using " << goodBarcodes.size() << " barcodes" << endl;
