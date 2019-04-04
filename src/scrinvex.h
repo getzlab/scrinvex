@@ -37,8 +37,8 @@ namespace scrinvex {
     typedef std::unordered_map<std::string, std::tuple<unsigned int, unsigned int> > alignmentLengthTracker;
     
     void countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom, const std::unordered_set<std::string>&);
-    void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
-    void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&, std::ostream&, std::ostream&);
+    void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&);
+    void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&);
     chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
     
     const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1, INTRONS = 0, JUNCTIONS = 1, EXONS = 2;

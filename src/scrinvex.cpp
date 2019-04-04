@@ -144,13 +144,9 @@ int main(int argc, char* argv[])
         }
 
         // Open all output files
-        ofstream introns(outputDir.Get() + "/" + SAMPLENAME + ".introns.tsv");
-        ofstream junctions(outputDir.Get() + "/" + SAMPLENAME + ".junctions.tsv");
-        ofstream exons(outputDir.Get() + "/" + SAMPLENAME + ".exons.tsv");
-        introns << "gene_id\tbarcode\tintrons" << endl;
-        junctions << "gene_id\tbarcode\tjunctions" << endl;
-        exons << "gene_id\tbarcode\texons" << endl;
-
+        ofstream output(outputDir.Get() + "/" + SAMPLENAME + ".scrinvex.tsv");
+        output << "gene_id\tbarcode\tintrons\tjunctions\texons" << endl;
+        
         cout << "Parsing BAM" << endl;
 
         while (bam.next(alignment))
@@ -164,23 +160,21 @@ int main(int argc, char* argv[])
                 {
                     // If we've switched chromosomes, drop all features from that chromosome
                     // Saves memory and also writes out the coverage data
-                    dropFeatures(features[current_chrom], counts, introns, junctions, exons);
+                    dropFeatures(features[current_chrom], counts, output);
                     current_chrom = chr;
                 }
                 else if (last_position > alignment.Position())
                     cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
                 last_position = alignment.Position();
-                trimFeatures(alignment, features[chr], counts, introns, junctions, exons); //drop features that appear before this read
+                trimFeatures(alignment, features[chr], counts, output); //drop features that appear before this read
                 countRead(counts, features[chr], alignment, chr, goodBarcodes);
             }
         }
 
         cout << "Finalizing data" << endl;
         // Drop all remaining genes to ensure their coverage data has been written
-        for (auto contig : features) if (contig.second.size()) dropFeatures(contig.second, counts, introns, junctions, exons);
-        introns.close();
-        junctions.close();
-        exons.close();
+        for (auto contig : features) if (contig.second.size()) dropFeatures(contig.second, counts, output);
+        output.close();
 
         if (missingUMI + missingBC)
             cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
@@ -327,7 +321,7 @@ namespace scrinvex {
         return chromosomeMap(sequences[alignment.ChrID()].Name);
     }
 
-    void dropFeatures(std::list<Feature> &features, geneCounters &counts, std::ostream &introns, std::ostream &junctions, std::ostream &exons)
+    void dropFeatures(std::list<Feature> &features, geneCounters &counts, std::ostream &output)
     {
         for (Feature &feat : features) if (feat.type == FeatureType::Gene) {
             // For all genes, dump their coverage data
@@ -337,14 +331,17 @@ namespace scrinvex {
             for (const string &barcode : invex.getBarcodes(barcodes))
             {
                 auto data = invex.getCounts(barcode);
-                if (get<INTRONS>(data)) introns << feat.feature_id << "\t" << barcode << "\t" << get<INTRONS>(data) << endl;
-                if (get<JUNCTIONS>(data)) junctions << feat.feature_id << "\t" << barcode << "\t" << get<JUNCTIONS>(data) << endl;
-                if (get<EXONS>(data)) exons << feat.feature_id << "\t" << barcode << "\t" << get<EXONS>(data) << endl;
+                auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
+                if (i + j + e > 0)
+                {
+                    output << feat.feature_id << "\t" << barcode << "\t" << i;
+                    output << "\t" << j << "\t" << e << endl;
+                }
             }
         }
         features.clear();
     }
-    void trimFeatures(Alignment &alignment, std::list<Feature> &features, geneCounters &counts, std::ostream &introns, std::ostream &junctions, std::ostream &exons)
+    void trimFeatures(Alignment &alignment, std::list<Feature> &features, geneCounters &counts, std::ostream &output)
     {
         auto cursor = features.begin();
         while (cursor != features.end() && cursor->end < alignment.Position())
@@ -357,9 +354,12 @@ namespace scrinvex {
                 for (const string &barcode : invex.getBarcodes(barcodes))
                 {
                     auto data = invex.getCounts(barcode);
-                    if (get<INTRONS>(data)) introns << cursor->feature_id << "\t" << barcode << "\t" << get<INTRONS>(data) << endl;
-                    if (get<JUNCTIONS>(data)) junctions << cursor->feature_id << "\t" << barcode << "\t" << get<JUNCTIONS>(data) << endl;
-                    if (get<EXONS>(data)) exons << cursor->feature_id << "\t" << barcode << "\t" << get<EXONS>(data) << endl;
+                    auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
+                    if (i + j + e > 0)
+                    {
+                        output << cursor->feature_id << "\t" << barcode << "\t" << i;
+                        output << "\t" << j << "\t" << e << endl;
+                    }
                 }
             }
             ++cursor;
