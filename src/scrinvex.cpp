@@ -24,7 +24,7 @@ namespace scrinvex {
 
 int main(int argc, char* argv[])
 {
-    ArgumentParser parser("SCRINVEX");
+    ArgumentParser parser("SCRINVEX - A Single Cell RNA-Seq QC tool");
     HelpFlag help(parser, "help", "Display this message and quit", {'h', "help"});
     Positional<string> gtfFile(parser, "gtf", "The input GTF file containing features to check the bam against");
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
