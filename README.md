@@ -19,7 +19,7 @@ scR-Invex is available via `gcr.io/broad-cga-aarong-gtex/scrinvex`
 
 # Usage
 
-`scrinvex {gtf} {bam} [-h] [-s {sample name}] [-b {barcode file}] [-q {mapping quality}] [-o {output filename}]`
+`scrinvex {gtf} {bam} [-h] [-b {barcode file}] [-q {mapping quality}] [-o {output filename}]`
 
 ### GTF
 
