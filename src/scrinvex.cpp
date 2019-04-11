@@ -28,8 +28,7 @@ int main(int argc, char* argv[])
     HelpFlag help(parser, "help", "Display this message and quit", {'h', "help"});
     Positional<string> gtfFile(parser, "gtf", "The input GTF file containing features to check the bam against");
     Positional<string> bamFile(parser, "bam", "The input SAM/BAM file containing reads to process");
-    Positional<string> outputDir(parser, "output", "Output Directory");
-    ValueFlag<string> sampleName(parser, "sample", "The name of the current sample.  Default: The bam's filename", {'s', "sample"});
+    ValueFlag<string> outputPath(parser, "ouput", "Path to output file.  Default: {current directory}/{bam filename}.scrinvex.tsv", {'o', "output"});
     ValueFlag<string> barcodeFile(parser, "barcodes", "Path to filtered barcodes.tsv file from cellranger. Only barcodes listed in the file will be used. Default: All barcodes present in bam", {'b', "barcodes"});
     ValueFlag<unsigned int> mappingQualityThreshold(parser,"quality", "Set the lower bound on read quality for coverage counting. Reads below this quality are skipped. Default: 255", {'q', "quality"});
     try
@@ -38,11 +37,10 @@ int main(int argc, char* argv[])
 
         if (!gtfFile) throw ValidationError("No GTF file provided");
         if (!bamFile) throw ValidationError("No BAM file provided");
-        if (!outputDir) throw ValidationError("No output directory provided");
 
-        const string SAMPLENAME = sampleName ? sampleName.Get() : boost::filesystem::path(bamFile.Get()).filename().string();
+        const string OUTPUTPATH = outputPath ? outputPath.Get() : (boost::filesystem::path(bamFile.Get()).filename().string() + ".scrinvex.tsv");
         const unsigned int MAPQ = mappingQualityThreshold ? mappingQualityThreshold.Get() : 255u;
-
+        
         Feature line; //current feature being read from the gtf
         ifstream reader(gtfFile.Get());
         if (!reader.is_open())
@@ -137,14 +135,8 @@ int main(int argc, char* argv[])
         int32_t last_position = 0; // For some reason, htslib has decided that this will be the datatype used for positions
         chrom current_chrom = 0;
 
-        //use boost to ensure that the output directory exists before the metrics are dumped to it
-        if (!boost::filesystem::exists(outputDir.Get()))
-        {
-            boost::filesystem::create_directories(outputDir.Get());
-        }
-
         // Open all output files
-        ofstream output(outputDir.Get() + "/" + SAMPLENAME + ".scrinvex.tsv");
+        ofstream output(OUTPUTPATH);
         output << "gene_id\tbarcode\tintrons\tjunctions\texons" << endl;
         
         cout << "Parsing BAM" << endl;

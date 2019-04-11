@@ -19,7 +19,7 @@ scR-Invex is available via `gcr.io/broad-cga-aarong-gtex/scrinvex`
 
 # Usage
 
-`scrinvex {gtf} {bam} {output directory} [-h] [-s {sample name}] [-b {barcode file}] [-q {mapping quality}]`
+`scrinvex {gtf} {bam} [-h] [-s {sample name}] [-b {barcode file}] [-q {mapping quality}] [-o {output filename}]`
 
 ### GTF
 
@@ -41,12 +41,9 @@ Only reads with a barcode listed in the file will be considered.
 
 ## Output Format
 
-`scrinvex` produces 3 files in the output directory:
-* `*.introns.tsv`
-* `*.junctions.tsv`
-* `*.exons.tsv`
+`scrinvex` produces 1 file, which defaults to `{sample name}.scrinvex.tsv`
 
-Each of these three files contains 3 columns:
+This file contains 5 columns:
 * `gene_id`
 * `barcode`
 * Counts of intron, junction, or exon reads for that gene id - barcode combination, respectively
