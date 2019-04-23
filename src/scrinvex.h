@@ -36,15 +36,18 @@ namespace scrinvex {
     // gene id -> (genic aligned length, exonic aligned length)
     typedef std::unordered_map<std::string, std::tuple<unsigned int, unsigned int> > alignmentLengthTracker;
     
-    void countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom, const std::unordered_set<std::string>&);
+    void countRead(geneCounters&, std::list<Feature>&, Alignment&, chrom, const std::unordered_set<std::string>&, InvexCounter* = nullptr);
     void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&);
+//    void dropFeatures(std::list<Feature>&, geneCounters&, std::ostream&);
     void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&);
+//    void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&);
     chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
     
     const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1, INTRONS = 0, JUNCTIONS = 1, EXONS = 2;
     const std::string BARCODE_TAG = "CB", UMI_TAG = "UB", MISMATCH_TAG = "NM";
     
     extern unsigned int missingBC, missingUMI, skippedBC;
+    extern std::unordered_map<std::string, unsigned long> intergenicCounts; //bc -> readcounts for intergenic reads
 }
 
 #endif /* scrinvex_h */

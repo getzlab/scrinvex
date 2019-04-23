@@ -20,6 +20,7 @@ using namespace scrinvex;
 
 namespace scrinvex {
     unsigned int missingBC, missingUMI, skippedBC;
+    unordered_map<string, unsigned long> intergenicCounts;
 }
 
 int main(int argc, char* argv[])
@@ -31,6 +32,7 @@ int main(int argc, char* argv[])
     ValueFlag<string> outputPath(parser, "ouput", "Path to output file.  Default: {current directory}/{bam filename}.scrinvex.tsv", {'o', "output"});
     ValueFlag<string> barcodeFile(parser, "barcodes", "Path to filtered barcodes.tsv file from cellranger. Only barcodes listed in the file will be used. Default: All barcodes present in bam", {'b', "barcodes"});
     ValueFlag<unsigned int> mappingQualityThreshold(parser,"quality", "Set the lower bound on read quality for coverage counting. Reads below this quality are skipped. Default: 255", {'q', "quality"});
+    ImplicitValueFlag<string> summaryFile(parser, "path", "Produce a summary of counts by barcode in a separate file. This includes a count of intergenic reads. If the flag is provided with no arguments, this defaults to {current directory}/{bam filename}.scrinvex.summary.tsv. You may provide a different path as an argument to this flag", {'s', "summary"}, "", "");
     try
     {
         parser.ParseCLI(argc, argv);
@@ -40,6 +42,9 @@ int main(int argc, char* argv[])
 
         const string OUTPUTPATH = outputPath ? outputPath.Get() : (boost::filesystem::path(bamFile.Get()).filename().string() + ".scrinvex.tsv");
         const unsigned int MAPQ = mappingQualityThreshold ? mappingQualityThreshold.Get() : 255u;
+        const string SUMMARYPATH = summaryFile.Get().empty() ? (boost::filesystem::path(bamFile.Get()).filename().string() + ".scrinvex.summary.tsv") : summaryFile.Get();
+        InvexCounter summaryCounts;
+        InvexCounter* const SUMMARYPTR = summaryFile ? &summaryCounts : nullptr;
         
         Feature line; //current feature being read from the gtf
         ifstream reader(gtfFile.Get());
@@ -159,7 +164,7 @@ int main(int argc, char* argv[])
                     cerr << "Warning: The input bam does not appear to be sorted. An unsorted bam will yield incorrect results" << endl;
                 last_position = alignment.Position();
                 trimFeatures(alignment, features[chr], counts, output); //drop features that appear before this read
-                countRead(counts, features[chr], alignment, chr, goodBarcodes);
+                countRead(counts, features[chr], alignment, chr, goodBarcodes, SUMMARYPTR);
             }
         }
 
@@ -167,6 +172,25 @@ int main(int argc, char* argv[])
         // Drop all remaining genes to ensure their coverage data has been written
         for (auto contig : features) if (contig.second.size()) dropFeatures(contig.second, counts, output);
         output.close();
+        
+        if (summaryFile)
+        {
+            ofstream summary(SUMMARYPATH);
+            summary << "barcode\tintrons\tjunctions\texons\tintergenic" << endl;
+            set<string> barcodes;
+            for (const string &barcode : summaryCounts.getBarcodes(barcodes))
+            {
+                auto data = summaryCounts.getCounts(barcode);
+                auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
+                unsigned long n = intergenicCounts[barcode];
+                if (i + j + e + n > 0)
+                {
+                    summary << barcode << "\t" << i;
+                    summary << "\t" << j << "\t" << e << "\t" << n << endl;
+                }
+            }
+            summary.close();
+        }
 
         if (missingUMI + missingBC)
             cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
@@ -247,7 +271,7 @@ namespace scrinvex {
         return destination;
     }
 
-    void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome, const std::unordered_set<std::string> &goodBarcodes)
+    void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome, const std::unordered_set<std::string> &goodBarcodes, InvexCounter *summary)
     {
         // We don't expect goodBarcodes to change, so just grab its size once
         static const size_t n_barcodes = goodBarcodes.size();
@@ -289,28 +313,59 @@ namespace scrinvex {
                     get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
             }
         }
+        unsigned long totalGenicLength = 0;
         // For every gene that this read aligned to
         for (auto entry : lengths)
         {
             unsigned int genicLength = get<GENIC_ALIGNED_LENGTH>(entry.second), exonicLength = get<EXONIC_ALIGNED_LENGTH>(entry.second);
             if (genicLength > 0)
             {
+                totalGenicLength += genicLength;
                 if (genicLength > exonicLength) // Read did not align entirely to exons
                 {
-                    if (exonicLength) get<JUNCTIONS>(counts[entry.first].getCounts(barcode)) += 1; // Read aligned a little to exons
-                    else get<INTRONS>(counts[entry.first].getCounts(barcode)) += 1; // Read aligned entirely to introns
+                    if (exonicLength) // Read aligned a little to exons
+                    {
+                        get<JUNCTIONS>(counts[entry.first].getCounts(barcode)) += 1;
+                        if (summary != nullptr) get<JUNCTIONS>(summary->getCounts(barcode)) += 1;
+                    }
+                    else // Read aligned entirely to introns
+                    {
+                        get<INTRONS>(counts[entry.first].getCounts(barcode)) += 1;
+                        if (summary != nullptr) get<INTRONS>(summary->getCounts(barcode)) += 1;
+                    }
                 }
-                else get<EXONS>(counts[entry.first].getCounts(barcode)) += 1; // Read aligned entirely to exons
+                else // Read aligned entirely to exons
+                {
+                    get<EXONS>(counts[entry.first].getCounts(barcode)) += 1;
+                    if (summary != nullptr) get<EXONS>(summary->getCounts(barcode)) += 1;
+                }
 
                 // Now add the UMI to the tracker so we skip UMI duplicates
                 fragmentTracker[entry.first].insert(umi);
             }
         }
+        
+        if (totalGenicLength == 0ul) intergenicCounts[barcode] += 1;
     }
 
     chrom getChrom(Alignment &alignment, SeqLib::HeaderSequenceVector &sequences)
     {
         return chromosomeMap(sequences[alignment.ChrID()].Name);
+    }
+    
+    void writeFeature(const string &gene_id, InvexCounter &invex, ostream &output)
+    {
+        set<string> barcodes;
+        for (const string &barcode : invex.getBarcodes(barcodes))
+        {
+            auto data = invex.getCounts(barcode);
+            auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
+            if (i + j + e > 0)
+            {
+                output << gene_id << "\t" << barcode << "\t" << i;
+                output << "\t" << j << "\t" << e << endl;
+            }
+        }
     }
 
     void dropFeatures(std::list<Feature> &features, geneCounters &counts, std::ostream &output)
@@ -319,20 +374,11 @@ namespace scrinvex {
             // For all genes, dump their coverage data
             fragmentTracker.erase(feat.feature_id);
             InvexCounter &invex = counts[feat.feature_id];
-            set<string> barcodes;
-            for (const string &barcode : invex.getBarcodes(barcodes))
-            {
-                auto data = invex.getCounts(barcode);
-                auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
-                if (i + j + e > 0)
-                {
-                    output << feat.feature_id << "\t" << barcode << "\t" << i;
-                    output << "\t" << j << "\t" << e << endl;
-                }
-            }
+            writeFeature(feat.feature_id, invex, output);
         }
         features.clear();
     }
+    
     void trimFeatures(Alignment &alignment, std::list<Feature> &features, geneCounters &counts, std::ostream &output)
     {
         auto cursor = features.begin();
@@ -342,17 +388,7 @@ namespace scrinvex {
                 // For all genes, dump their coverage data
                 fragmentTracker.erase(cursor->feature_id);
                 InvexCounter &invex = counts[cursor->feature_id];
-                set<string> barcodes;
-                for (const string &barcode : invex.getBarcodes(barcodes))
-                {
-                    auto data = invex.getCounts(barcode);
-                    auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
-                    if (i + j + e > 0)
-                    {
-                        output << cursor->feature_id << "\t" << barcode << "\t" << i;
-                        output << "\t" << j << "\t" << e << endl;
-                    }
-                }
+                writeFeature(cursor->gene_id, invex, output);
             }
             ++cursor;
         }
