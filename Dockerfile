@@ -1,5 +1,5 @@
 # Dockerfile for scR-Invex
-FROM gcr.io/broad-cga-aarong-gtex/rnaseqc:4aaa2e2846e31cd3714c7b17f215b4556fb5121f
+FROM gcr.io/broad-cga-aarong-gtex/rnaseqc:60c06f2835ffdc8ffd29ab059fd6b2de923e0972
 MAINTAINER Aaron Graubert
 
 COPY Makefile /opt/scrinvex/
