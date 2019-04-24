@@ -180,7 +180,7 @@ int main(int argc, char* argv[])
             set<string> barcodes;
             for (const string &barcode : summaryCounts.getBarcodes(barcodes))
             {
-                auto data = summaryCounts.getCounts(barcode);
+                countTuple &data = summaryCounts.getCounts(barcode);
                 auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
                 unsigned long n = intergenicCounts[barcode];
                 if (i + j + e + n > 0)
@@ -259,7 +259,7 @@ int main(int argc, char* argv[])
 
 namespace scrinvex {
 
-    std::tuple<unsigned long, unsigned long, unsigned long>& InvexCounter::getCounts(const std::string &barcode)
+    countTuple& InvexCounter::getCounts(const std::string &barcode)
     {
         return this->counts[barcode];
     }
@@ -269,6 +269,16 @@ namespace scrinvex {
         // Insert all barcodes from this InvexCounter into a given set
         for (auto entry : this->counts) destination.insert(entry.first);
         return destination;
+    }
+    
+    inline void updateCounts(unsigned int genicLength, unsigned int exonicLength, countTuple &counts)
+    {
+        if (genicLength > exonicLength)
+        {
+            if (exonicLength) get<JUNCTIONS>(counts) += 1; // read aligned to some exons and introns
+            else get<INTRONS>(counts) += 1; // read aligned to all introns
+        }
+        else get<EXONS>(counts) += 1; // read aligned to entirely exons
     }
 
     void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome, const std::unordered_set<std::string> &goodBarcodes, InvexCounter *summary)
@@ -321,24 +331,8 @@ namespace scrinvex {
             if (genicLength > 0)
             {
                 totalGenicLength += genicLength;
-                if (genicLength > exonicLength) // Read did not align entirely to exons
-                {
-                    if (exonicLength) // Read aligned a little to exons
-                    {
-                        get<JUNCTIONS>(counts[entry.first].getCounts(barcode)) += 1;
-                        if (summary != nullptr) get<JUNCTIONS>(summary->getCounts(barcode)) += 1;
-                    }
-                    else // Read aligned entirely to introns
-                    {
-                        get<INTRONS>(counts[entry.first].getCounts(barcode)) += 1;
-                        if (summary != nullptr) get<INTRONS>(summary->getCounts(barcode)) += 1;
-                    }
-                }
-                else // Read aligned entirely to exons
-                {
-                    get<EXONS>(counts[entry.first].getCounts(barcode)) += 1;
-                    if (summary != nullptr) get<EXONS>(summary->getCounts(barcode)) += 1;
-                }
+                updateCounts(genicLength, exonicLength, counts[entry.first].getCounts(barcode));
+                if (summary != nullptr) updateCounts(genicLength, exonicLength, summary->getCounts(barcode));
 
                 // Now add the UMI to the tracker so we skip UMI duplicates
                 fragmentTracker[entry.first].insert(umi);
@@ -358,7 +352,7 @@ namespace scrinvex {
         set<string> barcodes;
         for (const string &barcode : invex.getBarcodes(barcodes))
         {
-            auto data = invex.getCounts(barcode);
+            countTuple &data = invex.getCounts(barcode);
             auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
             if (i + j + e > 0)
             {

@@ -19,17 +19,18 @@ namespace scrinvex {
     
     // gid -> invex counter
     typedef std::unordered_map<std::string, InvexCounter> geneCounters;
+    typedef std::tuple<unsigned long, unsigned long, unsigned long> countTuple;
     
     class InvexCounter {
         // barcode -> counts
-        std::unordered_map<std::string, std::tuple<unsigned long, unsigned long, unsigned long> > counts;
+        std::unordered_map<std::string,  countTuple> counts;
         
     public:
         InvexCounter() : counts() {
             
         }
         
-        std::tuple<unsigned long, unsigned long, unsigned long>& getCounts(const std::string&);
+        countTuple& getCounts(const std::string&);
         std::set<std::string>& getBarcodes(std::set<std::string>&) const;
     };
     
