@@ -191,7 +191,7 @@ int main(int argc, char* argv[])
             }
             summary.close();
         }
-
+        
         if (missingUMI + missingBC)
             cerr << "There were " << missingBC << " reads without a barcode (CB) and " << missingUMI << " reads without a UMI (UB)" << endl;
 

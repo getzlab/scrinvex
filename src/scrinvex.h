@@ -15,10 +15,6 @@
 using namespace rnaseqc;
 
 namespace scrinvex {
-    class InvexCounter;
-    
-    // gid -> invex counter
-    typedef std::unordered_map<std::string, InvexCounter> geneCounters;
     typedef std::tuple<unsigned long, unsigned long, unsigned long> countTuple;
     
     class InvexCounter {
@@ -33,6 +29,9 @@ namespace scrinvex {
         countTuple& getCounts(const std::string&);
         std::set<std::string>& getBarcodes(std::set<std::string>&) const;
     };
+    
+    // gid -> invex counter
+    typedef std::unordered_map<std::string, InvexCounter> geneCounters;
     
     // gene id -> (genic aligned length, exonic aligned length)
     typedef std::unordered_map<std::string, std::tuple<unsigned int, unsigned int> > alignmentLengthTracker;
