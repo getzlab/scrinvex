@@ -15,7 +15,7 @@
 using namespace rnaseqc;
 
 namespace scrinvex {
-    typedef std::tuple<unsigned long, unsigned long, unsigned long> countTuple;
+    typedef std::tuple<unsigned long, unsigned long, unsigned long, unsigned long, unsigned long> countTuple;
     
     class InvexCounter {
         // barcode -> counts
@@ -43,7 +43,7 @@ namespace scrinvex {
 //    void trimFeatures(Alignment&, std::list<Feature>&, geneCounters&, std::ostream&);
     chrom getChrom(Alignment&, SeqLib::HeaderSequenceVector&);
     
-    const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1, INTRONS = 0, JUNCTIONS = 1, EXONS = 2;
+    const std::size_t GENIC_ALIGNED_LENGTH = 0, EXONIC_ALIGNED_LENGTH = 1, INTRONS = 0, JUNCTIONS = 1, EXONS = 2, SENSE = 3, ANTISENSE = 4;
     const std::string BARCODE_TAG = "CB", UMI_TAG = "UB", MISMATCH_TAG = "NM";
     
     extern unsigned int missingBC, missingUMI, skippedBC;

@@ -43,7 +43,8 @@ Only reads with a barcode listed in the file will be considered.
 
 `scrinvex` produces 1 file, which defaults to `{sample name}.scrinvex.tsv`
 
-This file contains 5 columns:
+This file contains 7 columns:
 * `gene_id`
 * `barcode`
 * Counts of intron, junction, or exon reads for that gene id - barcode combination, respectively
+* Counts of sense and antisense reads for that gene id - barcode combination, respectively

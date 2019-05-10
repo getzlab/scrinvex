@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
 
         // Open all output files
         ofstream output(OUTPUTPATH);
-        output << "gene_id\tbarcode\tintrons\tjunctions\texons" << endl;
+        output << "gene_id\tbarcode\tintrons\tjunctions\texons\tsense\tantisense" << endl;
         
         cout << "Parsing BAM" << endl;
 
@@ -176,17 +176,18 @@ int main(int argc, char* argv[])
         if (summaryFile)
         {
             ofstream summary(SUMMARYPATH);
-            summary << "barcode\tintrons\tjunctions\texons\tintergenic" << endl;
+            summary << "barcode\tintrons\tjunctions\texons\tsense\tantisense\tintergenic" << endl;
             set<string> barcodes;
             for (const string &barcode : summaryCounts.getBarcodes(barcodes))
             {
                 countTuple &data = summaryCounts.getCounts(barcode);
                 auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
+                auto s = get<SENSE>(data), a = get<ANTISENSE>(data);
                 unsigned long n = intergenicCounts[barcode];
-                if (i + j + e + n > 0)
+                if (i + j + e + s + a + n > 0)
                 {
                     summary << barcode << "\t" << i;
-                    summary << "\t" << j << "\t" << e << "\t" << n << endl;
+                    summary << "\t" << j << "\t" << e << "\t" << s << "\t" << a << "\t" << n << endl;
                 }
             }
             summary.close();
@@ -271,7 +272,7 @@ namespace scrinvex {
         return destination;
     }
     
-    inline void updateCounts(unsigned int genicLength, unsigned int exonicLength, countTuple &counts)
+    inline void updateCounts(unsigned int genicLength, unsigned int exonicLength, countTuple &counts, const bool sense)
     {
         if (genicLength > exonicLength)
         {
@@ -279,6 +280,8 @@ namespace scrinvex {
             else get<INTRONS>(counts) += 1; // read aligned to all introns
         }
         else get<EXONS>(counts) += 1; // read aligned to entirely exons
+        if (sense) get<SENSE>(counts) += 1; // read aligned to sense strand
+        else get<ANTISENSE>(counts) += 1;
     }
 
     void countRead(geneCounters &counts, std::list<Feature> &features, Alignment &alignment, chrom chromosome, const std::unordered_set<std::string> &goodBarcodes, InvexCounter *summary)
@@ -309,6 +312,8 @@ namespace scrinvex {
             ++skippedBC;
             return;
         }
+        
+        unordered_map<string, bool> sense_antisense;
 
         // Intersect all aligned segments with the list of features.
         for (Feature &segment : alignedSegments)
@@ -319,8 +324,10 @@ namespace scrinvex {
                 // Count the total number of read bases which align to genes and exons
                 if (genomeFeature.type == FeatureType::Exon && fragmentTracker[genomeFeature.gene_id].count(umi) == 0)
                     get<EXONIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
-                else if (genomeFeature.type == FeatureType::Gene && fragmentTracker[genomeFeature.feature_id].count(umi) == 0)
+                else if (genomeFeature.type == FeatureType::Gene && fragmentTracker[genomeFeature.feature_id].count(umi) == 0) {
                     get<GENIC_ALIGNED_LENGTH>(lengths[genomeFeature.gene_id]) += partialIntersect(genomeFeature, segment);
+                    sense_antisense.emplace(genomeFeature.gene_id, genomeFeature.strand == segment.strand);
+                }
             }
         }
         unsigned long totalGenicLength = 0;
@@ -331,8 +338,8 @@ namespace scrinvex {
             if (genicLength > 0)
             {
                 totalGenicLength += genicLength;
-                updateCounts(genicLength, exonicLength, counts[entry.first].getCounts(barcode));
-                if (summary != nullptr) updateCounts(genicLength, exonicLength, summary->getCounts(barcode));
+                updateCounts(genicLength, exonicLength, counts[entry.first].getCounts(barcode), sense_antisense[entry.first]);
+                if (summary != nullptr) updateCounts(genicLength, exonicLength, summary->getCounts(barcode), sense_antisense[entry.first]);
 
                 // Now add the UMI to the tracker so we skip UMI duplicates
                 fragmentTracker[entry.first].insert(umi);
@@ -354,10 +361,11 @@ namespace scrinvex {
         {
             countTuple &data = invex.getCounts(barcode);
             auto i = get<INTRONS>(data), j = get<JUNCTIONS>(data), e = get<EXONS>(data);
-            if (i + j + e > 0)
+            auto s = get<SENSE>(data), a = get<ANTISENSE>(data);
+            if (i + j + e + s + a > 0)
             {
                 output << gene_id << "\t" << barcode << "\t" << i;
-                output << "\t" << j << "\t" << e << endl;
+                output << "\t" << j << "\t" << e << "\t" << s << "\t" << a << endl;
             }
         }
     }
