@@ -1,4 +1,5 @@
-![Scrinvex Logo](scrinvex.png)
+<img src="scrinvex.png" alt="Scrinvex Logo" width="60%"/>
+
 ---
 **Single Cell RNA Intron-Exon Counting**
 
