@@ -17,13 +17,13 @@ SRCDIR=src
 OBJECTS=$(SOURCES:.cpp=.o)
 SEQFLAGS=$(STDLIB) -D_GLIBCXX_USE_CXX11_ABI=$(ABI)
 
-scrinvex: $(foreach file,$(OBJECTS),$(SRCDIR)/$(file)) rnaseqc/rnaseqc.a rnaseqc/SeqLib/bin/libseqlib.a rnaseqc/SeqLib/bin/libhts.a
+scrinvex: $(foreach file,$(OBJECTS),$(SRCDIR)/$(file)) rnaseqc/rnaseqc.a rnaseqc/SeqLib/lib/libseqlib.a rnaseqc/SeqLib/lib/libhts.a
 	$(CC) -O3 $(LIBRARY_PATHS) -o $@ $^ $(STATIC_LIBS) $(LIBS)
 
 %.o: %.cpp
 	$(CC) $(CFLAGS) -I. $(INCLUDE_DIRS) -c -o $@ $<
 
-rnaseqc/SeqLib/bin/libseqlib.a rnaseqc/SeqLib/bin/libhts.a:
+rnaseqc/SeqLib/lib/libseqlib.a rnaseqc/SeqLib/lib/libhts.a:
 	cd rnaseqc/SeqLib && ./configure && make CXXFLAGS="$(SEQFLAGS)" && make install
 
 rnaseqc/rnaseqc.a:
