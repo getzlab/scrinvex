@@ -9,7 +9,7 @@ Reads with the same UMI are only checked against any given gene once. Subsequent
 
 # Install scR-Invex
 
-* `git clone --recursive git@github.com:broadinstitute/scrinvex.git`
+* `git clone --recursive git@github.com:getzlab/scrinvex.git`
     * If you do not use `--recursive` you will be missing dependencies
     * Fix with `git submodule update --init --recursive`
 * `make`
